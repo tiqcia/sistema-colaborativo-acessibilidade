@@ -1,0 +1,9 @@
+node_modules/
+.env
+
+# Arquivo do banco (cada computador cria o seu)
+data/*.db
+data/*.db-*
+
+# Fotos enviadas (quando o recurso de fotos for ativado)
+uploads/
