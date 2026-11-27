@@ -20,6 +20,26 @@ export interface EstabelecimentoDetalhe {
   notaMedia: number;
   totalAvaliacoes: number;
   imagemUrl: string | null; // sempre null até as fotos serem implementadas
+  latitude: number | null;  // null = o local ainda não foi marcado no mapa
+  longitude: number | null;
+}
+
+// GET /estabelecimentos/mapa  (só os que já têm localização)
+export interface EstabelecimentoNoMapa {
+  id: string;
+  nome: string;
+  categoria: string;
+  latitude: number;
+  longitude: number;
+  nota: number;           // média das avaliações (0 se não houver)
+  totalAvaliacoes: number;
+}
+
+// PUT /estabelecimentos/:id/localizacao
+export interface RespostaLocalizacao {
+  id: string;
+  latitude: number;
+  longitude: number;
 }
 
 // GET /estabelecimentos/:id/avaliacoes

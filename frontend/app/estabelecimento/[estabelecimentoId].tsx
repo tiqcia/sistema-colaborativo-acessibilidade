@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,8 @@ import { EstrelasAvaliacao } from '../../components/estrelasAvaliacao';
 import { AvaliacaoCard, Avaliacao } from '../../components/avaliacaoCard';
 import { BotaoVoltar } from '../../components/botaoVoltar';
 import { AvaliacaoModal } from '../../components/avaliacaoModal';
+import { SeletorLocalizacaoModal } from '../../components/seletorLocalizacaoModal';
+import type { Coordenada } from '../../utils/localizacao';
 import { api, mensagemDeErro } from '../../services/api';
 import type { EstabelecimentoDetalhe } from '../../services/api';
 
@@ -30,6 +33,10 @@ export default function DetalhesEstabelecimentoScreen() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [tentativa, setTentativa] = useState(0);
+
+  // Marcar/corrigir a localização do local no mapa
+  const [seletorAberto, setSeletorAberto] = useState(false);
+  const [salvandoLocalizacao, setSalvandoLocalizacao] = useState(false);
 
   // Carrega os dados toda vez que a tela ganha foco. Assim, ao voltar da tela
   // "Avaliar local", a nova avaliação já aparece.
@@ -69,6 +76,26 @@ export default function DetalhesEstabelecimentoScreen() {
     setTentativa((anterior) => anterior + 1);
   }
 
+  // Grava no servidor a localização escolhida no mapa e já atualiza esta tela
+  async function handleConfirmarLocalizacao(coordenada: Coordenada) {
+    if (!estabelecimento) return;
+
+    try {
+      setSalvandoLocalizacao(true);
+      await api.definirLocalizacao(estabelecimentoId, coordenada);
+      setEstabelecimento({
+        ...estabelecimento,
+        latitude: coordenada.latitude,
+        longitude: coordenada.longitude,
+      });
+      setSeletorAberto(false);
+    } catch (e) {
+      Alert.alert('Erro', `Não foi possível salvar a localização. ${mensagemDeErro(e)}`);
+    } finally {
+      setSalvandoLocalizacao(false);
+    }
+  }
+
   if (carregando) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -96,6 +123,12 @@ export default function DetalhesEstabelecimentoScreen() {
       </View>
     );
   }
+
+  // Localização atual do local (null = ainda não está no mapa)
+  const localizacaoAtual: Coordenada | null =
+    estabelecimento.latitude !== null && estabelecimento.longitude !== null
+      ? { latitude: estabelecimento.latitude, longitude: estabelecimento.longitude }
+      : null;
 
   return (
     <View style={styles.container}>
@@ -181,9 +214,40 @@ export default function DetalhesEstabelecimentoScreen() {
 
           {/* Conteúdo Dinâmico da Aba Selecionada */}
           {abaAtiva === 'sobre' ? (
-            <Text style={styles.descricao}>
-              {estabelecimento.descricao || 'Este local ainda não tem descrição.'}
-            </Text>
+            <>
+              <Text style={styles.descricao}>
+                {estabelecimento.descricao || 'Este local ainda não tem descrição.'}
+              </Text>
+
+              {/* Localização no mapa */}
+              <View style={styles.localizacaoBox}>
+                <Ionicons
+                  name={localizacaoAtual ? 'location' : 'location-outline'}
+                  size={24}
+                  color="#4338CA"
+                />
+                <View style={styles.localizacaoTextos}>
+                  <Text style={styles.localizacaoTexto}>
+                    {localizacaoAtual
+                      ? 'Este local aparece no mapa.'
+                      : 'Este local ainda não aparece no mapa.'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setSeletorAberto(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      localizacaoAtual
+                        ? 'Corrigir a localização deste local no mapa'
+                        : 'Marcar este local no mapa'
+                    }
+                  >
+                    <Text style={styles.localizacaoAcao}>
+                      {localizacaoAtual ? 'Corrigir localização' : 'Marcar no mapa'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
           ) : (
             <View style={styles.avaliacoesLista}>
               {avaliacoes.length === 0 && (
@@ -228,6 +292,16 @@ export default function DetalhesEstabelecimentoScreen() {
         visible={avaliacaoSelecionada !== null}
         avaliacao={avaliacaoSelecionada}
         onClose={() => setAvaliacaoSelecionada(null)}
+      />
+
+      <SeletorLocalizacaoModal
+        visible={seletorAberto}
+        titulo={localizacaoAtual ? 'Corrigir localização' : 'Onde fica o local?'}
+        endereco={estabelecimento.endereco}
+        coordenadaInicial={localizacaoAtual}
+        salvando={salvandoLocalizacao}
+        onConfirmar={handleConfirmarLocalizacao}
+        onFechar={() => setSeletorAberto(false)}
       />
     </View>
   );
@@ -329,6 +403,31 @@ const styles = StyleSheet.create({
   },
   avaliacoesLista: {
     gap: 12,
+  },
+  localizacaoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 20,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 16,
+  },
+  localizacaoTextos: {
+    flex: 1,
+    gap: 4,
+  },
+  localizacaoTexto: {
+    fontSize: 14,
+    color: '#1e293b',
+  },
+  localizacaoAcao: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4338ca',
+    textDecorationLine: 'underline',
   },
   footerAction: {
     position: 'absolute',

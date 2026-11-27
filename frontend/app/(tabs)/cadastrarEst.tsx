@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { api, mensagemDeErro } from '../../services/api';
+import { SeletorLocalizacaoModal } from '../../components/seletorLocalizacaoModal';
+import { Coordenada, formatarCoordenada } from '../../utils/localizacao';
 
 const OPCOES_CATEGORIA = [
   'Restaurante',
@@ -40,6 +42,10 @@ export default function CadastrarScreen() {
   const [assunto, setAssunto] = useState('');
   const [descricao, setDescricao] = useState('');
   const [imagemUri, setImagemUri] = useState<string | null>(null);
+
+  // Onde o estabelecimento fica no mapa (escolhido no SeletorLocalizacaoModal)
+  const [localizacao, setLocalizacao] = useState<Coordenada | null>(null);
+  const [seletorAberto, setSeletorAberto] = useState(false);
 
   const [aberto, setAberto] = useState(false);
 
@@ -74,7 +80,7 @@ export default function CadastrarScreen() {
   }
 
   async function handleSalvar() {
-  if (!nomeLocal.trim() || !endereco.trim() || !assunto) {
+  if (!nomeLocal.trim() || !endereco.trim() || !assunto || !localizacao) {
     const msg = 'Preencha todos os campos obrigatórios (*).';
     Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Atenção', msg);
     return;
@@ -87,6 +93,9 @@ export default function CadastrarScreen() {
     formData.append('nome', nomeLocal.trim());
     formData.append('endereco', endereco.trim());
     formData.append('categoria', assunto);
+    // O FormData só leva texto, então as coordenadas viram String (o backend converte de volta)
+    formData.append('latitude', String(localizacao.latitude));
+    formData.append('longitude', String(localizacao.longitude));
     if (descricao.trim()) {
       formData.append('observacoes', descricao.trim());
     }
@@ -114,6 +123,7 @@ export default function CadastrarScreen() {
     setAssunto('');
     setDescricao('');
     setImagemUri(null);
+    setLocalizacao(null);
 
     router.push({
       pathname: '/estabelecimento/[estabelecimentoId]',
@@ -181,6 +191,32 @@ export default function CadastrarScreen() {
             onChangeText={setEndereco}
             accessibilityLabel="endereço do estabelecimento"
           />
+        </View>
+
+        {/* Localização no mapa */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Localização no mapa *</Text>
+          <TouchableOpacity
+            style={styles.botaoLocalizacao}
+            onPress={() => setSeletorAberto(true)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              localizacao
+                ? 'Alterar a localização marcada no mapa'
+                : 'Marcar a localização do estabelecimento no mapa'
+            }
+          >
+            <Ionicons
+              name={localizacao ? 'location' : 'location-outline'}
+              size={22}
+              color="#4338CA"
+            />
+            <Text style={localizacao ? styles.dropdownText : styles.placeholderText}>
+              {localizacao
+                ? `Local marcado (${formatarCoordenada(localizacao)})`
+                : 'Toque para marcar no mapa'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Categoria */}
@@ -269,6 +305,18 @@ export default function CadastrarScreen() {
 
       </ScrollView>
 
+      <SeletorLocalizacaoModal
+        visible={seletorAberto}
+        titulo="Onde fica o local?"
+        endereco={endereco}
+        coordenadaInicial={localizacao}
+        onConfirmar={(coordenada) => {
+          setLocalizacao(coordenada);
+          setSeletorAberto(false);
+        }}
+        onFechar={() => setSeletorAberto(false)}
+      />
+
     </KeyboardAvoidingView>
   );
 }
@@ -325,6 +373,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  botaoLocalizacao: {
+    width: 345,
+    maxWidth: '100%',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#71717A',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   dropdownButtonAberto: {
     borderBottomLeftRadius: 0,

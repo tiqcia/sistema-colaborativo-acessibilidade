@@ -10,13 +10,13 @@ import type { Request, Response } from 'express';
 // DEPOIS de definirmos a variável.
 process.env.CAMINHO_BANCO = ':memory:';
 
-const { db } = await import('../src/config/banco.ts');
+const { db, garantirColuna } = await import('../src/config/banco.ts');
 const { popular } = await import('../src/config/popularBanco.ts');
 const estabelecimentoController = await import('../src/controllers/estabelecimentoController.ts');
 const avaliacaoController = await import('../src/controllers/avaliacaoController.ts');
 const { tratadorDeErros, rotaNaoEncontrada } = await import('../src/middlewares/tratadorDeErros.ts');
 const { tempoRelativo } = await import('../src/utils/tempoRelativo.ts');
-const { lerNota, lerIDDaRota } = await import('../src/utils/validacao.ts');
+const { lerNota, lerIDDaRota, lerLatitude, lerLongitude } = await import('../src/utils/validacao.ts');
 
 type Handler = (req: Request, res: Response) => void;
 
@@ -74,6 +74,8 @@ test('GET /estabelecimentos/:id devolve o formato de detalhes', () => {
     notaMedia: 4.5,
     totalAvaliacoes: 2,
     imagemUrl: null,
+    latitude: null, // os dados de exemplo ainda não têm localização no mapa
+    longitude: null,
   });
 });
 
@@ -182,6 +184,123 @@ test('POST avaliacoes recusa dados inválidos', () => {
   }
   assert.equal(chamar(avaliacaoController.criar, { params: { id: '999' }, body: { nota: 4, comentario: 'x' } }).codigo, 404);
   assert.equal(chamar(avaliacaoController.criar, { params: { id: '1' }, body: undefined }).codigo, 400);
+});
+
+test('POST /estabelecimentos aceita localização (texto, como vem do FormData) e a devolve nos detalhes', () => {
+  const res = chamar(estabelecimentoController.criar, {
+    body: { nome: 'Padaria Sol', endereco: 'Rua B, 20', categoria: 'Loja', latitude: '-23.3105', longitude: '-51.1628' },
+  });
+  assert.equal(res.codigo, 201);
+
+  const detalhe = chamar(estabelecimentoController.detalhar, { params: { id: res.corpo.id } }).corpo;
+  assert.equal(detalhe.latitude, -23.3105); // texto virou número
+  assert.equal(detalhe.longitude, -51.1628);
+});
+
+test('POST /estabelecimentos recusa localização incompleta ou fora dos limites', () => {
+  const base = { nome: 'Z', endereco: 'Y', categoria: 'Loja' };
+  const casos: unknown[] = [
+    { ...base, latitude: '-23.3' },                       // falta a longitude
+    { ...base, longitude: '-51.1' },                      // falta a latitude
+    { ...base, latitude: '91', longitude: '0' },          // latitude passa de 90
+    { ...base, latitude: '0', longitude: '-181' },        // longitude passa de 180
+    { ...base, latitude: 'abc', longitude: '0' },         // não é número
+    { ...base, latitude: true, longitude: 0 },            // tipo errado
+  ];
+  for (const body of casos) {
+    const res = chamar(estabelecimentoController.criar, { body });
+    assert.equal(res.codigo, 400, JSON.stringify(body));
+  }
+});
+
+test('GET /estabelecimentos/mapa devolve só quem tem localização, com nota e total de avaliações', () => {
+  const res = chamar(estabelecimentoController.listarNoMapa);
+  assert.equal(res.codigo, 200);
+  // Dos locais criados até aqui, só a "Padaria Sol" tem localização.
+  assert.equal(res.corpo.length, 1);
+  assert.deepEqual(res.corpo[0], {
+    id: res.corpo[0].id,
+    nome: 'Padaria Sol',
+    categoria: 'Loja',
+    latitude: -23.3105,
+    longitude: -51.1628,
+    nota: 0,              // ainda sem avaliações: 0, nunca null
+    totalAvaliacoes: 0,
+  });
+});
+
+test('PUT /estabelecimentos/:id/localizacao marca um local antigo no mapa', () => {
+  // O McDonald's (id 1) veio sem localização
+  const antes = chamar(estabelecimentoController.listarNoMapa).corpo.map((p: { id: string }) => p.id);
+  assert.equal(antes.includes('1'), false);
+
+  const res = chamar(estabelecimentoController.definirLocalizacao, {
+    params: { id: '1' },
+    body: { latitude: -23.3236, longitude: '-51.1853' }, // número e texto são aceitos
+  });
+  assert.equal(res.codigo, 200);
+  assert.deepEqual(res.corpo, { id: '1', latitude: -23.3236, longitude: -51.1853 });
+
+  // agora aparece no mapa, já com a nota média das avaliações que ele tinha
+  const ponto = chamar(estabelecimentoController.listarNoMapa).corpo.find((p: { id: string }) => p.id === '1');
+  assert.ok(ponto);
+  assert.equal(ponto.nota, 4.2);          // (4 + 5 + 3,5) / 3, das avaliações dos testes anteriores
+  assert.equal(ponto.totalAvaliacoes, 3);
+
+  // corrigir a localização também funciona
+  chamar(estabelecimentoController.definirLocalizacao, { params: { id: '1' }, body: { latitude: 10, longitude: 20 } });
+  assert.equal(chamar(estabelecimentoController.detalhar, { params: { id: '1' } }).corpo.latitude, 10);
+});
+
+test('PUT localizacao recusa dados inválidos e id inexistente', () => {
+  const invalidos: unknown[] = [undefined, {}, { latitude: 1 }, { longitude: 1 }, { latitude: 91, longitude: 0 }, { latitude: 0, longitude: 181 }, { latitude: '', longitude: '' }];
+  for (const body of invalidos) {
+    const res = chamar(estabelecimentoController.definirLocalizacao, { params: { id: '1' }, body });
+    assert.equal(res.codigo, 400, JSON.stringify(body));
+  }
+  assert.equal(chamar(estabelecimentoController.definirLocalizacao, { params: { id: '999' }, body: { latitude: 0, longitude: 0 } }).codigo, 404);
+  assert.equal(chamar(estabelecimentoController.definirLocalizacao, { params: { id: 'abc' }, body: { latitude: 0, longitude: 0 } }).codigo, 404);
+});
+
+test('validação: latitude e longitude', () => {
+  assert.equal(lerLatitude(-23.31), -23.31);
+  assert.equal(lerLatitude('90'), 90);
+  assert.equal(lerLatitude(' -90 '), -90);
+  assert.equal(lerLongitude(180), 180);
+  assert.equal(lerLongitude('0'), 0); // zero é uma coordenada válida (não pode virar "vazio")
+  for (const entrada of [91, -91, '', '  ', 'abc', NaN, Infinity, null, undefined, true, [], {}]) {
+    assert.equal(lerLatitude(entrada), null, String(entrada));
+  }
+  assert.equal(lerLongitude(181), null);
+  assert.equal(lerLongitude(-181), null);
+});
+
+test('o banco recusa coordenadas fora dos limites (rede de segurança)', () => {
+  const gravar = (lat: number, lng: number) => db.prepare(
+    'UPDATE Estabelecimento SET latitude = ?, longitude = ? WHERE estabelecimentoID = 1'
+  ).run(lat, lng);
+  assert.throws(() => gravar(95, 0));
+  assert.throws(() => gravar(0, 200));
+  assert.doesNotThrow(() => gravar(-23.3, -51.1));
+});
+
+test('garantirColuna acrescenta a coluna sem perder dados e pode rodar de novo', () => {
+  // Simula uma tabela "antiga", sem a coluna nova, já com uma linha dentro
+  db.exec('CREATE TABLE TesteMigracao (id INTEGER PRIMARY KEY, nome TEXT)');
+  db.prepare("INSERT INTO TesteMigracao (nome) VALUES ('antigo')").run();
+
+  const colunas = () => (db.prepare('PRAGMA table_info(TesteMigracao)').all() as unknown as Array<{ name: string }>).map((c) => c.name);
+  assert.deepEqual(colunas(), ['id', 'nome']);
+
+  garantirColuna('TesteMigracao', 'extra', 'REAL');
+  garantirColuna('TesteMigracao', 'extra', 'REAL'); // segunda vez: não dá erro e não duplica
+  assert.deepEqual(colunas(), ['id', 'nome', 'extra']);
+
+  const linha = db.prepare('SELECT nome, extra FROM TesteMigracao').get() as unknown as { nome: string; extra: number | null };
+  assert.equal(linha.nome, 'antigo'); // o dado antigo continua lá
+  assert.equal(linha.extra, null);    // e a coluna nova começa vazia
+
+  db.exec('DROP TABLE TesteMigracao');
 });
 
 test('o próprio banco recusa dados que violam as regras (rede de segurança)', () => {

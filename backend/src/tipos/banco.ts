@@ -16,6 +16,19 @@ export interface LinhaEstabelecimentoDetalhe {
   descricao: string | null;
   notaMedia: number;
   totalAvaliacoes: number;
+  latitude: number | null;  // null = ainda sem localização no mapa
+  longitude: number | null;
+}
+
+// Um ponto do mapa: só vem estabelecimento COM localização (por isso não há null aqui).
+export interface LinhaEstabelecimentoMapa {
+  estabelecimentoID: number;
+  nome: string;
+  categoria: string;
+  latitude: number;
+  longitude: number;
+  notaMedia: number;
+  totalAvaliacoes: number;
 }
 
 export interface LinhaAvaliacao {
@@ -33,6 +46,8 @@ export interface NovoEstabelecimento {
   endereco: string;
   categoria: string;
   descricao: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface NovaAvaliacao {

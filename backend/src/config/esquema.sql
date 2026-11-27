@@ -32,7 +32,13 @@ CREATE TABLE IF NOT EXISTS Estabelecimento (
   categoria         TEXT NOT NULL,
   descricao         TEXT,
   -- Data/hora em UTC, no formato "AAAA-MM-DD HH:MM:SS"
-  criadoEm          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  criadoEm          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Localização no mapa (graus decimais). NULL = o local ainda não foi
+  -- marcado no mapa (é o caso dos locais cadastrados antes do mapa existir).
+  -- Num banco que JÁ EXISTIA, estas colunas são adicionadas por banco.ts
+  -- ("garantirColuna"), porque o CREATE TABLE acima não altera tabelas prontas.
+  latitude          REAL CHECK (latitude  BETWEEN  -90 AND  90),
+  longitude         REAL CHECK (longitude BETWEEN -180 AND 180)
   -- FOTOS (futuro): adicionar a coluna  imagem TEXT  (caminho do arquivo).
 );
 

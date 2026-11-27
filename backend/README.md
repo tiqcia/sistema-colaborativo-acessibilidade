@@ -29,9 +29,11 @@ Os nomes dos campos das respostas são os que o frontend atual já usa (tipados 
 | Método e endereço | Corpo enviado | Resposta |
 |---|---|---|
 | `GET /estabelecimentos?busca=texto` | — | `[{ id, nome, descricao, nota }]` |
-| `GET /estabelecimentos/:id` | — | `{ id, nome, categoria, endereco, descricao, notaMedia, totalAvaliacoes, imagemUrl }` |
+| `GET /estabelecimentos/mapa` | — | `[{ id, nome, categoria, latitude, longitude, nota, totalAvaliacoes }]` (só locais que já têm localização) |
+| `GET /estabelecimentos/:id` | — | `{ id, nome, categoria, endereco, descricao, notaMedia, totalAvaliacoes, imagemUrl, latitude, longitude }` (`latitude`/`longitude` são `null` se o local ainda não está no mapa) |
 | `GET /estabelecimentos/:id/avaliacoes` | — | `[{ id, autor, data, nota, titulo?, comentario }]` |
-| `POST /estabelecimentos` | multipart/form-data **ou** JSON: `nome`, `endereco`, `categoria`, `observacoes?` (e `imagem?`, ignorada por enquanto) | `201 { id }` |
+| `POST /estabelecimentos` | multipart/form-data **ou** JSON: `nome`, `endereco`, `categoria`, `observacoes?`, `latitude?` + `longitude?` (as duas juntas) (e `imagem?`, ignorada por enquanto) | `201 { id }` |
+| `PUT /estabelecimentos/:id/localizacao` | JSON: `latitude` (-90 a 90), `longitude` (-180 a 180) | `200 { id, latitude, longitude }` |
 | `POST /estabelecimentos/:id/avaliacoes` | JSON: `nota`, `titulo?`, `comentario` | `201 { id }` |
 | `GET /saude` | — | `{ status: "ok" }` |
 
@@ -41,6 +43,7 @@ Detalhes:
 - `data` já vem pronta, como "há 2 dias".
 - `autor` é "Usuário Anônimo" enquanto não houver login.
 - `imagemUrl` é `null` por enquanto (fotos ainda não existem no backend).
+- **Localização:** `latitude`/`longitude` são números em graus decimais. No `POST /estabelecimentos` (FormData) podem chegar como texto (`"-23.31"`); o backend converte. Enviar só uma das duas, ou um valor fora dos limites, dá `400`. `GET /estabelecimentos/mapa` precisa estar declarada antes de `/:id` em `estabelecimentoRoutes.ts`.
 - Códigos: `200` ok, `201` criado, `400` dados inválidos, `404` não encontrado, `500` erro interno.
 
 ## Estrutura (o que cada arquivo faz)
@@ -62,8 +65,8 @@ backend/
     ├── config/
     │   ├── ambiente.ts   lê o .env (porta, caminho do banco)
     │   ├── constantes.ts USUARIO_ANONIMO_ID = 1
-    │   ├── banco.ts      abre o SQLite, liga as chaves estrangeiras, cria as tabelas
-    │   ├── esquema.sql   as tabelas Usuario, Estabelecimento, Avaliacao
+    │   ├── banco.ts      abre o SQLite, liga as chaves estrangeiras, cria as tabelas e acrescenta colunas novas (garantirColuna)
+    │   ├── esquema.sql   as tabelas Usuario, Estabelecimento (com latitude/longitude), Avaliacao
     │   └── popularBanco.ts  dados de exemplo
     ├── routes/estabelecimentoRoutes.ts   endereço -> controller
     ├── controllers/      conferem os dados e montam a resposta
@@ -95,6 +98,8 @@ Caminho de uma requisição: **rota → controller → model → banco** e volta
 - **Comentário dentro de Avaliacao:** a coluna `comentario` é opcional no banco, mas o backend o exige (o app exige). Se um dia for opcional de verdade, basta tirar essa regra do controller.
 - **Sem listas nem chaves circulares:** as relações ficam só no lado "muitos" (`Avaliacao.usuarioID`, `Avaliacao.estabelecimentoID`, `Estabelecimento.usuarioID`). "Avaliações do usuário X" é uma consulta, não uma coluna.
 - **Busca por nome** é feita no código (ignora maiúsculas e acentos: "cafe" acha "Café"). Para poucos estabelecimentos é ótimo; com muitos, mover para o SQL.
+- **Localização opcional no banco:** `Estabelecimento.latitude` e `longitude` aceitam `NULL`, porque os locais cadastrados antes do mapa não têm localização. Em um banco que já existe, `banco.ts` (`garantirColuna`) acrescenta as duas colunas sozinho ao iniciar o servidor, sem apagar nada e sem duplicar se rodar de novo. Quem decide que o app EXIGE localização em novos cadastros é o frontend; a API continua aceitando cadastro sem ela.
+- **Sem dono da localização:** enquanto não houver login, qualquer pessoa pode corrigir a localização de um local (`PUT .../localizacao`). Com login, restringir a quem cadastrou o local.
 - **Categoria livre:** o backend aceita qualquer texto (até 50 caracteres) para vocês poderem mudar a lista do app sem mexer aqui.
 
 ## Como ativar as fotos depois
@@ -105,7 +110,7 @@ Caminho de uma requisição: **rota → controller → model → banco** e volta
 
 ## Próximos passos possíveis
 - Login/cadastro de usuários (guardar senha só com hash).
-- Coordenadas (`latitude`, `longitude`) em Estabelecimento e um endpoint leve para os pontos do mapa.
+- Filtrar `GET /estabelecimentos/mapa` pela área visível do mapa (hoje devolve todos os pontos, o que é ótimo para poucos locais).
 - Impedir mais de uma avaliação por usuário no mesmo local (só faz sentido depois do login).
 
 ## Para quem cuida do frontend

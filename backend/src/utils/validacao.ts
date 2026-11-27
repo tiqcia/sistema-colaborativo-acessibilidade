@@ -33,6 +33,31 @@ export function lerNota(valor: unknown): number | null {
   return nota;
 }
 
+// Confere uma coordenada: número (ou texto numérico, como vem do FormData) dentro do limite
+// (90 para latitude, 180 para longitude). Devolve o número ou null se for inválida.
+function lerCoordenada(valor: unknown, limite: number): number | null {
+  if (typeof valor !== 'number' && typeof valor !== 'string') return null;
+  if (typeof valor === 'string' && valor.trim() === '') return null;
+
+  const numero = Number(valor);
+  if (!Number.isFinite(numero) || Math.abs(numero) > limite) return null;
+  return numero;
+}
+
+export function lerLatitude(valor: unknown): number | null {
+  return lerCoordenada(valor, 90);
+}
+
+export function lerLongitude(valor: unknown): number | null {
+  return lerCoordenada(valor, 180);
+}
+
+// true se o campo veio preenchido (mesmo que com valor inválido). Serve para diferenciar
+// "não enviou localização" (permitido) de "enviou uma localização estragada" (erro 400).
+export function veioPreenchido(valor: unknown): boolean {
+  return valor !== undefined && valor !== null && !(typeof valor === 'string' && valor.trim() === '');
+}
+
 // Converte o :id da URL em número inteiro positivo. Devolve null se não for um.
 export function lerIDDaRota(valor: unknown): number | null {
   return typeof valor === 'string' && /^[1-9]\d{0,14}$/.test(valor) ? Number(valor) : null;

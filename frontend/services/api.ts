@@ -5,6 +5,7 @@
 // exatamente como process.env.EXPO_PUBLIC_API_URL (sem colchetes e sem desestruturar).
 import type { Avaliacao } from '../components/avaliacaoCard';
 import type { EstabelecimentoResumo } from '../components/estabelecimentoCard';
+import type { Coordenada } from '../utils/localizacao';
 
 // Formato da tela de detalhes (o mesmo que o backend envia em GET /estabelecimentos/:id)
 export interface EstabelecimentoDetalhe {
@@ -16,6 +17,20 @@ export interface EstabelecimentoDetalhe {
   notaMedia: number;
   totalAvaliacoes: number;
   imagemUrl: string | null; // null enquanto o backend não tiver fotos
+  latitude: number | null;  // null = o local ainda não foi marcado no mapa
+  longitude: number | null;
+}
+
+// Um pino do mapa (o mesmo que o backend envia em GET /estabelecimentos/mapa).
+// Só vêm locais que JÁ têm localização.
+export interface EstabelecimentoNoMapa {
+  id: string;
+  nome: string;
+  categoria: string;
+  latitude: number;
+  longitude: number;
+  nota: number;            // média das avaliações (0 se não houver)
+  totalAvaliacoes: number;
 }
 
 // Dados enviados ao criar uma avaliação
@@ -26,7 +41,7 @@ export interface NovaAvaliacao {
 }
 
 interface OpcoesRequisicao {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PUT';
   body?: FormData | string;
   headers?: Record<string, string>;
 }
@@ -103,6 +118,10 @@ export const api = {
   listarEstabelecimentos: () =>
     requisicao<EstabelecimentoResumo[]>('/estabelecimentos'),
 
+  // Pinos do mapa: estabelecimentos que já têm localização, com nota e total de avaliações
+  listarEstabelecimentosNoMapa: () =>
+    requisicao<EstabelecimentoNoMapa[]>('/estabelecimentos/mapa'),
+
   // Detalhes de um estabelecimento
   buscarEstabelecimento: (id: string) =>
     requisicao<EstabelecimentoDetalhe>(`/estabelecimentos/${encodeURIComponent(id)}`),
@@ -115,6 +134,17 @@ export const api = {
   // Não definimos Content-Type aqui: o fetch coloca o correto (com o "boundary").
   criarEstabelecimento: (formData: FormData) =>
     requisicao<{ id: string }>('/estabelecimentos', { method: 'POST', body: formData }),
+
+  // Marca (ou corrige) a localização de um estabelecimento que já existe
+  definirLocalizacao: (id: string, coordenada: Coordenada) =>
+    requisicao<{ id: string; latitude: number; longitude: number }>(
+      `/estabelecimentos/${encodeURIComponent(id)}/localizacao`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(coordenada),
+      }
+    ),
 
   // Nova avaliação (o id do estabelecimento vai na URL)
   criarAvaliacao: (id: string, dados: NovaAvaliacao) =>
