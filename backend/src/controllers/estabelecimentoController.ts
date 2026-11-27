@@ -10,6 +10,8 @@ import {
   buscarEstabelecimentoPorID,
   criarEstabelecimento,
   listarEstabelecimentos,
+  atualizarLocalizacao,
+  listarEstabelecimentosComLocalizacao,
 } from '../models/estabelecimentoModel.ts';
 import { USUARIO_ANONIMO_ID } from '../config/constantes.ts';
 import type { LinhaEstabelecimentoDetalhe, LinhaEstabelecimentoResumo } from '../tipos/banco.ts';
@@ -40,6 +42,8 @@ function paraDetalhe(linha: LinhaEstabelecimentoDetalhe): EstabelecimentoDetalhe
     notaMedia: linha.notaMedia,
     totalAvaliacoes: linha.totalAvaliacoes,
     imagemUrl: null,
+    latitude: linha.latitude,
+    longitude: linha.longitude,
   };
 }
 
@@ -102,4 +106,35 @@ export function criar(req: Request, res: Response): void {
 
   const resposta: RespostaCriado = { id: String(estabelecimentoID) };
   res.status(201).json(resposta);
+}
+
+// GET /estabelecimentos/mapa — pins que têm coordenadas.
+export function listarNoMapa(_req: Request, res: Response): void {
+  res.json(listarEstabelecimentosComLocalizacao().map((linha) => ({
+    id: String(linha.estabelecimentoID),
+    nome: linha.nome,
+    endereco: linha.endereco,
+    categoria: linha.categoria,
+    latitude: linha.latitude,
+    longitude: linha.longitude,
+  })));
+}
+
+// PATCH /estabelecimentos/:id/localizacao — grava as coordenadas escolhidas no mapa.
+export function definirLocalizacao(req: Request, res: Response): void {
+  const id = lerIDDaRota(req.params.id);
+  const corpo: Record<string, unknown> = req.body ?? {};
+  const latitude = Number(corpo.latitude);
+  const longitude = Number(corpo.longitude);
+  if (id === null || !buscarEstabelecimentoPorID(id)) {
+    responderErro(res, 404, 'Estabelecimento não encontrado.');
+    return;
+  }
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    responderErro(res, 400, 'Informe coordenadas válidas.');
+    return;
+  }
+  atualizarLocalizacao(id, latitude, longitude);
+  res.json({ status: 'ok' });
 }

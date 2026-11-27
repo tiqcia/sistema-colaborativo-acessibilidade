@@ -15,10 +15,14 @@ export interface EstabelecimentoDetalhe {
   descricao: string;
   notaMedia: number;
   totalAvaliacoes: number;
-  imagemUrl: string | null; // null enquanto o backend não tiver fotos
+  imagemUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 // Dados enviados ao criar uma avaliação
+export interface EstabelecimentoMapa { id: string; nome: string; endereco: string; categoria: string; latitude: number | null; longitude: number | null; }
+
 export interface NovaAvaliacao {
   nota: number;
   titulo?: string;
@@ -102,6 +106,13 @@ export const api = {
   // Lista de estabelecimentos (tela de busca)
   listarEstabelecimentos: () =>
     requisicao<EstabelecimentoResumo[]>('/estabelecimentos'),
+
+  listarNoMapa: () => requisicao<EstabelecimentoMapa[]>('/estabelecimentos/mapa'),
+  definirLocalizacao: (id: string, latitude: number, longitude: number) =>
+    requisicao<{ status: string }>(`/estabelecimentos/${encodeURIComponent(id)}/localizacao`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ latitude, longitude }),
+    }),
 
   // Detalhes de um estabelecimento
   buscarEstabelecimento: (id: string) =>

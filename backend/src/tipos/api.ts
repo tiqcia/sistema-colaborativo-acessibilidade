@@ -19,7 +19,9 @@ export interface EstabelecimentoDetalhe {
   descricao: string;
   notaMedia: number;
   totalAvaliacoes: number;
-  imagemUrl: string | null; // sempre null até as fotos serem implementadas
+  imagemUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 // GET /estabelecimentos/:id/avaliacoes
@@ -40,4 +42,13 @@ export interface RespostaCriado {
 // Qualquer erro
 export interface RespostaErro {
   erro: string;
+}
+
+export interface EstabelecimentoMapa {
+  id: string;
+  nome: string;
+  endereco: string;
+  categoria: string;
+  latitude: number;
+  longitude: number;
 }

@@ -7,6 +7,8 @@ import { lerMultipart } from '../middlewares/lerMultipart.ts';
 
 export const estabelecimentoRoutes = express.Router();
 
+estabelecimentoRoutes.get('/mapa', estabelecimentoController.listarNoMapa);
+estabelecimentoRoutes.patch('/:id/localizacao', estabelecimentoController.definirLocalizacao);
 estabelecimentoRoutes.get('/', estabelecimentoController.listar);                           // GET  /estabelecimentos?busca=
 estabelecimentoRoutes.post('/', lerMultipart, estabelecimentoController.criar);             // POST /estabelecimentos
 estabelecimentoRoutes.get('/:id', estabelecimentoController.detalhar);                      // GET  /estabelecimentos/1

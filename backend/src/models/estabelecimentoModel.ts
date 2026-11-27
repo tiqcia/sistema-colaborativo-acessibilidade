@@ -14,7 +14,7 @@ import type {
 // Lista todos com a nota média (0 se ainda não tiver avaliações).
 export function listarEstabelecimentos(): LinhaEstabelecimentoResumo[] {
   return db.prepare(`
-    SELECT e.estabelecimentoID, e.nome, e.descricao,
+    SELECT e.estabelecimentoID, e.nome, e.descricao, e.latitude, e.longitude,
            COALESCE(ROUND(AVG(a.qtdEstrelas), 1), 0) AS notaMedia
     FROM Estabelecimento e
     LEFT JOIN Avaliacao a ON a.estabelecimentoID = e.estabelecimentoID
@@ -26,7 +26,7 @@ export function listarEstabelecimentos(): LinhaEstabelecimentoResumo[] {
 // Um estabelecimento com nota média e total de avaliações. undefined se não existir.
 export function buscarEstabelecimentoPorID(estabelecimentoID: number): LinhaEstabelecimentoDetalhe | undefined {
   return db.prepare(`
-    SELECT e.estabelecimentoID, e.nome, e.categoria, e.endereco, e.descricao,
+    SELECT e.estabelecimentoID, e.nome, e.categoria, e.endereco, e.descricao, e.latitude, e.longitude,
            COALESCE(ROUND(AVG(a.qtdEstrelas), 1), 0) AS notaMedia,
            COUNT(a.avaliacaoID) AS totalAvaliacoes
     FROM Estabelecimento e
@@ -48,4 +48,19 @@ export function criarEstabelecimento(dados: NovoEstabelecimento): number {
     VALUES (?, ?, ?, ?, ?)
   `).run(dados.usuarioID, dados.nome, dados.endereco, dados.categoria, dados.descricao);
   return Number(resultado.lastInsertRowid);
+}
+
+// Atualiza a localização geográfica de um estabelecimento já existente.
+export function atualizarLocalizacao(estabelecimentoID: number, latitude: number, longitude: number): void {
+  db.prepare('UPDATE Estabelecimento SET latitude = ?, longitude = ? WHERE estabelecimentoID = ?')
+    .run(latitude, longitude, estabelecimentoID);
+}
+
+// Retorna somente estabelecimentos que já possuem coordenadas, para pins do mapa.
+export function listarEstabelecimentosComLocalizacao() {
+  return db.prepare(`
+    SELECT estabelecimentoID, nome, endereco, categoria, latitude, longitude
+    FROM Estabelecimento
+    ORDER BY nome COLLATE NOCASE
+  `).all() as Array<{ estabelecimentoID: number; nome: string; endereco: string; categoria: string; latitude: number | null; longitude: number | null }>;
 }

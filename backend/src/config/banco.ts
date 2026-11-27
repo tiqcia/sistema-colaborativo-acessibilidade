@@ -21,6 +21,16 @@ db.exec('PRAGMA foreign_keys = ON');
 // Cria as tabelas (se ainda não existirem) e o usuário anônimo.
 db.exec(fs.readFileSync(path.join(import.meta.dirname, 'esquema.sql'), 'utf8'));
 
+// Migração compatível com bancos existentes: adiciona coordenadas, se necessário.
+for (const coluna of ['latitude', 'longitude']) {
+  try {
+    db.exec(`ALTER TABLE Estabelecimento ADD COLUMN ${coluna} REAL`);
+  } catch (erro) {
+    // SQLite sinaliza coluna duplicada quando a migração já foi aplicada.
+    if (!(erro instanceof Error) || !erro.message.includes('duplicate column name')) throw erro;
+  }
+}
+
 // Executa vários comandos como um só: ou tudo dá certo, ou nada é gravado.
 export function emTransacao<T>(funcao: () => T): T {
   db.exec('BEGIN');

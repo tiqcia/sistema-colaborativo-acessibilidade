@@ -16,6 +16,8 @@ export interface LinhaEstabelecimentoDetalhe {
   descricao: string | null;
   notaMedia: number;
   totalAvaliacoes: number;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface LinhaAvaliacao {
