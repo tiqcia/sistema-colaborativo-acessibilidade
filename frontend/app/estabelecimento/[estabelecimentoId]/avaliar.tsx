@@ -13,6 +13,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { BotaoVoltar } from '../../../components/botaoVoltar';
 import { EstrelasAvaliacao } from '../../../components/estrelasAvaliacao';
+import { api, mensagemDeErro } from '../../../services/api';
 
 export default function AvaliarEstabelecimentoScreen() {
   const { estabelecimentoId, nome } = useLocalSearchParams<{
@@ -41,20 +42,23 @@ export default function AvaliarEstabelecimentoScreen() {
 
     try {
       setEnviando(true);
-      const novaAvaliacao = {
-        estabelecimentoId,
+
+      // Envia a avaliação para o servidor (o id do local vai na URL)
+      await api.criarAvaliacao(estabelecimentoId, {
         nota,
         titulo: titulo.trim() || undefined,
         comentario: comentario.trim(),
-      };
+      });
 
-      console.log('Avaliação enviada:', novaAvaliacao);
-
+      // Deu certo: volta para os detalhes (que recarregam e já mostram a nova avaliação)
       if (router.canGoBack()) {
         router.back();
       } else {
         router.replace(`/estabelecimento/${estabelecimentoId}` as any);
       }
+    } catch (erro) {
+      const msg = mensagemDeErro(erro);
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Erro', msg);
     } finally {
       setEnviando(false);
     }
@@ -80,7 +84,7 @@ export default function AvaliarEstabelecimentoScreen() {
         {/* Cabeçalho */}
         <Text style={styles.titulo}>Avaliar local</Text>
         <Text style={styles.subtitulo}>
-          {nome || "McDonald's"}
+          {nome ?? ''}
         </Text>
 
         {/* Seletor de Nota */}
@@ -119,13 +123,16 @@ export default function AvaliarEstabelecimentoScreen() {
 
         {/* Botão Confirmar */}
         <TouchableOpacity
-          style={styles.botaoEnviar}
+          style={[styles.botaoEnviar, enviando && styles.botaoEnviarDesabilitado]}
           onPress={handleEnviarAvaliacao}
+          disabled={enviando}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="Publicar avaliação"
         >
-          <Text style={styles.botaoEnviarTexto}>Publicar avaliação</Text>
+          <Text style={styles.botaoEnviarTexto}>
+            {enviando ? 'Publicando...' : 'Publicar avaliação'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -220,6 +227,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
+  },
+  botaoEnviarDesabilitado: {
+    opacity: 0.6,
   },
   botaoEnviarTexto: {
     fontSize: 17,

@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
+import { api, mensagemDeErro } from '../../services/api';
 
 const OPCOES_CATEGORIA = [
   'Restaurante',
@@ -89,31 +91,36 @@ export default function CadastrarScreen() {
       formData.append('observacoes', descricao.trim());
     }
 
-    if (imagemUri) {
-      const nomeArquivo = imagemUri.split('/').pop() || 'foto.jpg';
-      const tipo = nomeArquivo.endsWith('.png') ? 'image/png' : 'image/jpeg';
-      formData.append('imagem', {
-        uri: imagemUri,
-        name: nomeArquivo,
-        type: tipo,
-      } as any);
-    }
+    // FOTOS (futuro): o backend ainda não guarda imagens, então a foto escolhida
+    // NÃO é enviada por enquanto (enviar só gastaria rede, e uma foto grande demais
+    // faria o cadastro falhar). Quando o backend tiver fotos, reative este bloco:
+    //
+    // if (imagemUri) {
+    //   const nomeArquivo = imagemUri.split('/').pop() || 'foto.jpg';
+    //   const tipo = nomeArquivo.endsWith('.png') ? 'image/png' : 'image/jpeg';
+    //   formData.append('imagem', {
+    //     uri: imagemUri,
+    //     name: nomeArquivo,
+    //     type: tipo,
+    //   } as any);
+    // }
 
-    console.log('Pronto para enviar ao backend:', {
-      nome: nomeLocal,
-      endereco,
-      categoria: assunto,
-      observacoes: descricao,
-      imagemUri,
-    });
+    // Envia para o servidor
+    const resposta = await api.criarEstabelecimento(formData);
 
+    // Deu certo: limpa o formulário e abre a página do local recém-cadastrado
     setNomeLocal('');
     setEndereco('');
     setAssunto('');
     setDescricao('');
     setImagemUri(null);
+
+    router.push({
+      pathname: '/estabelecimento/[estabelecimentoId]',
+      params: { estabelecimentoId: resposta.id },
+    });
   } catch (error) {
-    const msg = 'Não foi possível cadastrar o estabelecimento.';
+    const msg = `Não foi possível cadastrar o estabelecimento. ${mensagemDeErro(error)}`;
     Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Erro', msg);
   } finally {
     setEnviando(false);

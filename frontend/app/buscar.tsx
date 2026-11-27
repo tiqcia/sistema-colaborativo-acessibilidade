@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,30 +7,111 @@ import {
   FlatList,
   StyleSheet,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BotaoVoltar } from '../components/botaoVoltar';
 import {
   EstabelecimentoCard,
   EstabelecimentoResumo,
 } from '../components/estabelecimentoCard';
+import { api, mensagemDeErro } from '../services/api';
 
-const ESTABELECIMENTOS_MOCK: EstabelecimentoResumo[] = [
-  {
-    id: '1',
-    nome: "McDonald's",
-    descricao:
-      'Rede de fast-food tradicional conhecida por ter ótimos hambúrgueres e batatas fritas.',
-    nota: 4.2,
-  },
-];
+// Deixa o texto em minúsculas e sem acentos: digitar "cafe" encontra "Café".
+function normalizar(texto: string) {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
 
 export default function BuscarScreen() {
   const [busca, setBusca] = useState('');
 
-  const resultados = ESTABELECIMENTOS_MOCK.filter((item) =>
-    item.nome.toLowerCase().includes(busca.toLowerCase())
+  // Dados vindos do servidor (antes era a lista ESTABELECIMENTOS_MOCK)
+  const [estabelecimentos, setEstabelecimentos] = useState<EstabelecimentoResumo[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
+
+  // Busca a lista no servidor toda vez que a tela ganha foco
+  // (assim, um local recém-cadastrado já aparece aqui).
+  useFocusEffect(
+    useCallback(() => {
+      let ativo = true; // evita atualizar a tela se ela já foi fechada
+
+      async function carregarLista() {
+        try {
+          const lista = await api.listarEstabelecimentos();
+          if (!ativo) return;
+          setEstabelecimentos(lista);
+          setErro(null);
+        } catch (e) {
+          if (!ativo) return;
+          setErro(mensagemDeErro(e));
+        } finally {
+          if (ativo) setCarregando(false);
+        }
+      }
+
+      carregarLista();
+      return () => {
+        ativo = false;
+      };
+    }, [tentativa])
   );
+
+  function tentarNovamente() {
+    setCarregando(true);
+    setErro(null);
+    setTentativa((anterior) => anterior + 1);
+  }
+
+  const termo = normalizar(busca.trim());
+  const resultados = estabelecimentos.filter((item) =>
+    normalizar(item.nome).includes(termo)
+  );
+
+  // O que aparece quando a lista está vazia: carregando, erro ou "nada encontrado"
+  function renderVazio() {
+    if (carregando) {
+      return (
+        <ActivityIndicator
+          style={styles.carregando}
+          size="large"
+          color="#3b34c9"
+          accessibilityLabel="Carregando estabelecimentos"
+        />
+      );
+    }
+
+    if (erro) {
+      return (
+        <View style={styles.mensagemBox}>
+          <Text style={styles.mensagemTexto}>{erro}</Text>
+          <TouchableOpacity
+            style={styles.botaoTentar}
+            onPress={tentarNovamente}
+            accessibilityRole="button"
+            accessibilityLabel="Tentar carregar novamente"
+          >
+            <Text style={styles.botaoTentarTexto}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.mensagemBox}>
+        <Text style={styles.mensagemTexto}>
+          {busca.trim()
+            ? 'Nenhum estabelecimento encontrado para essa busca.'
+            : 'Nenhum estabelecimento cadastrado ainda.'}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -78,6 +159,7 @@ export default function BuscarScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listaContainer}
         keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={renderVazio}
         renderItem={({ item }) => (
           <EstabelecimentoCard estabelecimento={item} />
         )}
@@ -128,5 +210,31 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     paddingBottom: 20,
     alignItems: 'center',
+  },
+  carregando: {
+    marginTop: 30,
+  },
+  mensagemBox: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 12,
+  },
+  mensagemTexto: {
+    fontSize: 15,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  botaoTentar: {
+    backgroundColor: '#fbc07a',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  botaoTentarTexto: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
   },
 });

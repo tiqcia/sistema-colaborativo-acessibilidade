@@ -10,31 +10,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { EstrelasAvaliacao } from '../../components/estrelasAvaliacao';
 import { AvaliacaoCard, Avaliacao } from '../../components/avaliacaoCard';
 import { BotaoVoltar } from '../../components/botaoVoltar';
 import { AvaliacaoModal } from '../../components/avaliacaoModal';
-
-const AVALIACOES_MOCK: Avaliacao[] = [
-  {
-    id: '1',
-    autor: 'Fulano',
-    data: 'há 2 dias',
-    nota: 4,
-    titulo: 'Entrada ok, banheiro não',
-    comentario:
-      'A rampa da entrada é larga e tem corrimão. Dentro, o salão tem espaço para cadeira de rodas, mas o banheiro adaptado estava interditado para manutenção durante toda a tarde.',
-  },
-  {
-    id: '2',
-    autor: 'Usuário Anônimo',
-    data: 'há 1 semana',
-    nota: 5,
-    titulo: 'Ótimo atendimento e acesso',
-    comentario:
-      'Bom espaço entre as mesas para circulação de cadeira de rodas e cardápio de fácil leitura.',
-  },
-];
+import { api, mensagemDeErro } from '../../services/api';
+import type { EstabelecimentoDetalhe } from '../../services/api';
 
 export default function DetalhesEstabelecimentoScreen() {
   const { estabelecimentoId } = useLocalSearchParams<{ estabelecimentoId: string }>();
@@ -42,39 +24,75 @@ export default function DetalhesEstabelecimentoScreen() {
   const [abaAtiva, setAbaAtiva] = useState<'sobre' | 'avaliacoes'>('sobre');
   const [avaliacaoSelecionada, setAvaliacaoSelecionada] = useState<Avaliacao | null>(null);
 
-  const [estabelecimento, setEstabelecimento] = useState({
-    estabelecimentoId,
-    nome: "McDonald's",
-    categoria: 'Lanchonete',
-    endereco: 'R. Miguel Couto, 67 - Jardim Shangri-Lá',
-    notaMedia: 4.2,
-    totalAvaliacoes: 38,
-    descricao:
-      'Rede de fast-food tradicional conhecida por ter ótimos hambúrgueres e batatas fritas.',
-    imagemUrl:
-      'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=800&q=80',
-  });
-  const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>(AVALIACOES_MOCK);
-  const [carregando, setCarregando] = useState(false);
+  // Dados vindos do servidor (antes eram valores de exemplo escritos no código)
+  const [estabelecimento, setEstabelecimento] = useState<EstabelecimentoDetalhe | null>(null);
+  const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
 
+  // Carrega os dados toda vez que a tela ganha foco. Assim, ao voltar da tela
+  // "Avaliar local", a nova avaliação já aparece.
   useFocusEffect(
     useCallback(() => {
+      let ativo = true; // evita atualizar a tela se ela já foi fechada
+
       async function carregarDados() {
         try {
-          setCarregando(true);
+          // As duas buscas acontecem ao mesmo tempo
+          const [dados, lista] = await Promise.all([
+            api.buscarEstabelecimento(estabelecimentoId),
+            api.listarAvaliacoes(estabelecimentoId),
+          ]);
+          if (!ativo) return;
+          setEstabelecimento(dados);
+          setAvaliacoes(lista);
+          setErro(null);
+        } catch (e) {
+          if (!ativo) return;
+          setErro(mensagemDeErro(e));
         } finally {
-          setCarregando(false);
+          if (ativo) setCarregando(false);
         }
       }
 
       carregarDados();
-    }, [estabelecimentoId])
+      return () => {
+        ativo = false;
+      };
+    }, [estabelecimentoId, tentativa])
   );
+
+  function tentarNovamente() {
+    setCarregando(true);
+    setErro(null);
+    setTentativa((anterior) => anterior + 1);
+  }
 
   if (carregando) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#3b34c9" />
+      </View>
+    );
+  }
+
+  // Não conseguiu carregar e não há nada para mostrar: mensagem + botão de tentar de novo
+  if (!estabelecimento) {
+    return (
+      <View style={[styles.container, styles.centralizado]}>
+        <BotaoVoltar fallbackRoute="/buscar" style={styles.botaoVoltar} />
+        <Text style={styles.mensagemErro}>
+          {erro ?? 'Estabelecimento não encontrado.'}
+        </Text>
+        <TouchableOpacity
+          style={styles.botaoTentar}
+          onPress={tentarNovamente}
+          accessibilityRole="button"
+          accessibilityLabel="Tentar carregar novamente"
+        >
+          <Text style={styles.botaoTentarTexto}>Tentar novamente</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -86,10 +104,21 @@ export default function DetalhesEstabelecimentoScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerImageContainer}>
-          <Image
-            source={{ uri: estabelecimento.imagemUrl }}
-            style={styles.headerImage}
-          />
+          {estabelecimento.imagemUrl ? (
+            <Image
+              source={{ uri: estabelecimento.imagemUrl }}
+              style={styles.headerImage}
+            />
+          ) : (
+            // Ainda não há fotos no backend: mostra um ícone no lugar
+            <View
+              style={styles.headerSemImagem}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <Ionicons name="business-outline" size={64} color="#94a3b8" />
+            </View>
+          )}
           <BotaoVoltar
             fallbackRoute="/buscar"
             style={styles.botaoVoltar}
@@ -107,7 +136,8 @@ export default function DetalhesEstabelecimentoScreen() {
             <EstrelasAvaliacao nota={estabelecimento.notaMedia} tamanho={20} />
             <Text style={styles.ratingText}>
               {estabelecimento.notaMedia.toString().replace('.', ',')} -{' '}
-              {estabelecimento.totalAvaliacoes} avaliações
+              {estabelecimento.totalAvaliacoes}{' '}
+              {estabelecimento.totalAvaliacoes === 1 ? 'avaliação' : 'avaliações'}
             </Text>
           </View>
 
@@ -151,10 +181,16 @@ export default function DetalhesEstabelecimentoScreen() {
 
           {/* Conteúdo Dinâmico da Aba Selecionada */}
           {abaAtiva === 'sobre' ? (
-            <Text style={styles.descricao}>{estabelecimento.descricao}</Text>
+            <Text style={styles.descricao}>
+              {estabelecimento.descricao || 'Este local ainda não tem descrição.'}
+            </Text>
           ) : (
             <View style={styles.avaliacoesLista}>
-              {/* 3. Agora renderiza o estado "avaliacoes" em vez do mock direto */}
+              {avaliacoes.length === 0 && (
+                <Text style={styles.descricao}>
+                  Ainda não há avaliações. Seja o primeiro a avaliar este local!
+                </Text>
+              )}
               {avaliacoes.map((av) => (
                 <AvaliacaoCard
                   key={av.id}
@@ -318,6 +354,35 @@ const styles = StyleSheet.create({
   botaoAvaliarTexto: {
     fontSize: 18,
     fontWeight: '500',
+    color: '#1e293b',
+  },
+  headerSemImagem: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  centralizado: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    gap: 16,
+  },
+  mensagemErro: {
+    fontSize: 15,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  botaoTentar: {
+    backgroundColor: '#fbc07a',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  botaoTentarTexto: {
+    fontSize: 15,
+    fontWeight: '600',
     color: '#1e293b',
   },
 });
